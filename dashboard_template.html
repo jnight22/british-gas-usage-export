@@ -1,0 +1,718 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Energy Usage Dashboard</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface-1: #fcfcfb;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.10);
+    --wash: rgba(11, 11, 11, 0.05);
+    --series-1: #2a78d6;
+    --series-2: #eb6834;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface-1: #1a1a19;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255, 255, 255, 0.10);
+      --wash: rgba(255, 255, 255, 0.06);
+      --series-1: #3987e5;
+      --series-2: #d95926;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface-1: #1a1a19;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --wash: rgba(255, 255, 255, 0.06);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 48px; }
+  header h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+  header p { margin: 0; color: var(--text-secondary); }
+  h2 { font-size: 15px; font-weight: 600; margin: 32px 0 4px; }
+  .sub { color: var(--text-secondary); margin: 0 0 12px; font-size: 13px; }
+
+  .filters {
+    display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: end;
+    margin: 20px 0 8px;
+  }
+  .filters label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+  .filters select {
+    font: inherit; color: var(--text-primary); background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; min-width: 120px;
+  }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .seg button {
+    font: inherit; border: 0; background: var(--surface-1); color: var(--text-secondary);
+    padding: 6px 12px; cursor: pointer;
+  }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--wash); color: var(--text-primary); font-weight: 600; }
+  .period { color: var(--text-secondary); font-size: 13px; margin: 0; }
+
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; min-width: 0;
+  }
+  .card h3 { font-size: 14px; font-weight: 600; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+  .stack > .card + .card { margin-top: 16px; }
+
+  .key-line { display: inline-block; width: 14px; height: 2px; border-radius: 1px; }
+  .key-rect { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--text-secondary); margin: 0 0 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .glyph { font-size: 10px; color: var(--text-primary); }
+
+  .kpi .big { font-size: 30px; font-weight: 600; margin: 8px 0 0; line-height: 1.1; }
+  .kpi .big small { font-size: 13px; font-weight: 400; color: var(--text-secondary); margin-left: 4px; }
+  .kpi .delta { color: var(--text-secondary); font-size: 13px; margin: 6px 0 0; }
+  .kpi dl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin: 14px 0 0; }
+  .kpi dt { font-size: 12px; color: var(--text-muted); }
+  .kpi dd { margin: 0; font-size: 14px; }
+
+  .chart { position: relative; width: 100%; }
+  .chart svg { display: block; overflow: visible; }
+  .chart svg:focus { outline: none; }
+  .chart svg:focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; border-radius: 4px; }
+  .tick { fill: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .empty { color: var(--text-muted); padding: 24px 0; text-align: center; }
+
+  #tip {
+    position: fixed; z-index: 10; pointer-events: none; display: none;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); padding: 8px 10px; font-size: 12px; min-width: 160px;
+  }
+  #tip .t { color: var(--text-secondary); margin-bottom: 4px; }
+  #tip .r { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+  #tip .r b { font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  #tip .r span.l { color: var(--text-secondary); }
+  #tip .note { margin-top: 6px; color: var(--text-primary); }
+
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  th { font-weight: 600; color: var(--text-secondary); font-size: 12px; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  details summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+  details[open] summary { margin-bottom: 12px; }
+  .fuel-cell { display: inline-flex; align-items: center; gap: 6px; }
+  footer { margin-top: 32px; color: var(--text-muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<main id="main">
+  <header>
+    <h1>Energy usage</h1>
+    <p id="coverage"></p>
+  </header>
+
+  <div class="filters" role="group" aria-label="Filters">
+    <label>Year <select id="f-year"></select></label>
+    <label>Month <select id="f-month"></select></label>
+    <label>Fuel <select id="f-fuel"></select></label>
+    <label>Measure
+      <span class="seg" id="f-measure">
+        <button type="button" data-v="kwh" aria-pressed="true">Energy (kWh)</button>
+        <button type="button" data-v="cost" aria-pressed="false">Cost (£)</button>
+      </span>
+    </label>
+  </div>
+  <p class="period" id="period"></p>
+
+  <h2>Average per day</h2>
+  <p class="sub">Cost includes the standing charge. The comparison shows how the selected period differs from your all-time average.</p>
+  <div class="grid" id="kpis"></div>
+
+  <h2>Daily usage</h2>
+  <p class="sub">Unusual days are flagged when a day is far outside the median of the previous 28 days, both in absolute terms and relative to normal day-to-day variation.</p>
+  <div class="stack" id="daily"></div>
+
+  <h2>Average per day, by month</h2>
+  <p class="sub">See how your typical day changes through the year. Months with only part of their days recorded still show a fair daily average.</p>
+  <div class="card"><div class="legend" id="monthly-legend"></div><div class="chart" id="monthly"></div></div>
+
+  <h2>Average per day, by day of week</h2>
+  <div class="card"><div class="legend" id="dow-legend"></div><div class="chart" id="dow"></div></div>
+
+  <h2>Unusual days</h2>
+  <p class="sub" id="anomaly-sub"></p>
+  <div class="card table-wrap" id="anomalies"></div>
+
+  <h2>Monthly summary</h2>
+  <div class="card">
+    <details>
+      <summary>Show table</summary>
+      <div class="table-wrap" id="monthly-table"></div>
+    </details>
+  </div>
+
+  <footer id="footer"></footer>
+</main>
+<div id="tip" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  const PAYLOAD = /*__PAYLOAD__*/null;
+
+  // Colour follows the fuel, never its position, so filtering never repaints a series.
+  const FUELS = [
+    { key: 'electricity', label: 'Electricity', color: 'var(--series-1)' },
+    { key: 'gas', label: 'Gas', color: 'var(--series-2)' },
+  ];
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
+    'September', 'October', 'November', 'December'];
+  const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const DAY = 86400000;
+
+  // Anomaly rule: compare each day with the median of the previous 28 days.
+  const WINDOW_DAYS = 28;
+  const MIN_HISTORY = 7;    // need at least a week of history before judging a day
+  const Z_LIMIT = 3;        // robust z-score threshold (median / MAD)
+  const MIN_REL = 0.3;      // and at least 30% away from typical...
+  const MIN_ABS_KWH = 1;    // ...and at least 1 kWh away
+
+  const $ = (s) => document.querySelector(s);
+  const NS = 'http://www.w3.org/2000/svg';
+
+  const parseDate = (s) => { const [y, m, d] = s.split('-').map(Number); return Date.UTC(y, m - 1, d); };
+  const fmtDate = (t) => new Date(t).toLocaleDateString('en-GB',
+    { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  const sum = (a) => a.reduce((x, y) => x + y, 0);
+  const mean = (a) => (a.length ? sum(a) / a.length : NaN);
+  const median = (a) => {
+    const s = [...a].sort((x, y) => x - y), n = s.length;
+    return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
+  };
+
+  function detectAnomalies(rows) {
+    let lo = 0;
+    rows.forEach((r, i) => {
+      while (lo < i && rows[lo].t < r.t - WINDOW_DAYS * DAY) lo++;
+      const hist = rows.slice(lo, i);
+      if (hist.length < MIN_HISTORY) return;
+      const kwh = hist.map((x) => x.kwh);
+      const m = median(kwh);
+      const spread = 1.4826 * median(kwh.map((v) => Math.abs(v - m)));
+      const scale = Math.max(spread, 0.15 * m, 0.5);
+      const diff = r.kwh - m;
+      r.expectedKwh = m;
+      r.expectedCost = median(hist.map((x) => x.cost));
+      r.diffPct = m > 0 ? (diff / m) * 100 : null;
+      if (Math.abs(diff) / scale >= Z_LIMIT && Math.abs(diff) >= Math.max(MIN_REL * m, MIN_ABS_KWH)) {
+        r.anomaly = diff > 0 ? 'high' : 'low';
+      }
+    });
+  }
+
+  // ---- data ----
+  const series = {};
+  for (const f of FUELS) {
+    const rows = PAYLOAD.rows
+      .filter((r) => r.fuel === f.key)
+      .map((r) => {
+        const t = parseDate(r.date), d = new Date(t);
+        return { date: r.date, t, y: d.getUTCFullYear(), m: d.getUTCMonth(), dow: (d.getUTCDay() + 6) % 7,
+                 kwh: r.kwh, cost: r.cost };
+      })
+      .sort((a, b) => a.t - b.t);
+    detectAnomalies(rows);
+    series[f.key] = rows;
+  }
+  const fuels = FUELS.filter((f) => series[f.key].length);
+
+  // ---- state & formatting ----
+  const state = { year: 'all', month: 'all', fuel: 'all', measure: 'kwh' };
+  const isKwh = () => state.measure === 'kwh';
+  const val = (r) => (isKwh() ? r.kwh : r.cost);
+  const expected = (r) => (isKwh() ? r.expectedKwh : r.expectedCost);
+  const inYearPeriod = (r, year) =>
+    (year === 'all' || r.y === +year) && (state.month === 'all' || r.m === +state.month);
+  const inPeriod = (r) => inYearPeriod(r, state.year);
+  const activeFuels = () => fuels.filter((f) => state.fuel === 'all' || state.fuel === f.key);
+
+  function fmt(v) {
+    if (v == null || !isFinite(v)) return '–';
+    if (isKwh()) {
+      return (Math.abs(v) >= 100
+        ? v.toLocaleString('en-GB', { maximumFractionDigits: 0 })
+        : v.toFixed(1)) + ' kWh';
+    }
+    return '£' + v.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function fmtTick(v, step) {
+    if (isKwh()) return step < 1 ? v.toFixed(1) : String(Math.round(v));
+    return '£' + (step < 1 ? v.toFixed(2) : String(Math.round(v)));
+  }
+  const pct = (a, b) => (b > 0 ? ((a - b) / b) * 100 : null);
+  const fmtPct = (p) => (p == null ? '' : `${p >= 0 ? '▲' : '▼'} ${Math.abs(p).toFixed(0)}%`);
+
+  // ---- DOM helpers (all labels via textContent) ----
+  function h(tag, props = {}, children = []) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(props)) {
+      if (k === 'text') e.textContent = v;
+      else if (k === 'style') e.setAttribute('style', v);
+      else e.setAttribute(k, v);
+    }
+    for (const c of [].concat(children)) if (c != null) e.append(c);
+    return e;
+  }
+  function s(tag, attrs = {}, parent) {
+    const e = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === 'text') e.textContent = v;
+      else e.setAttribute(k, v);
+    }
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  const keyLine = (color) => h('span', { class: 'key-line', style: `background:${color}` });
+  const keyRect = (color) => h('span', { class: 'key-rect', style: `background:${color}` });
+
+  function scaleY(max) {
+    if (!(max > 0)) max = 1;
+    const raw = max / 4, p = 10 ** Math.floor(Math.log10(raw));
+    const step = [1, 2, 2.5, 5, 10].map((x) => x * p).find((x) => x >= raw);
+    const top = Math.ceil(max / step - 1e-9) * step;
+    const ticks = [];
+    for (let i = 0; i * step <= top + 1e-9; i++) ticks.push(+(i * step).toFixed(6));
+    return { top, ticks, step };
+  }
+  function barPath(x, yTop, w, hgt, r) {
+    if (hgt <= 0.5 || w <= 0) return '';
+    r = Math.min(r, w / 2, hgt);
+    return `M${x},${yTop + hgt}V${yTop + r}Q${x},${yTop} ${x + r},${yTop}H${x + w - r}` +
+      `Q${x + w},${yTop} ${x + w},${yTop + r}V${yTop + hgt}Z`;
+  }
+
+  // ---- tooltip ----
+  const tip = $('#tip');
+  function showTip(x, y, title, rows, note) {
+    tip.replaceChildren(h('div', { class: 't', text: title }));
+    for (const r of rows) {
+      tip.append(h('div', { class: 'r' }, [
+        keyLine(r.color), h('b', { text: r.value }), h('span', { class: 'l', text: r.label }),
+      ]));
+    }
+    if (note) tip.append(h('div', { class: 'note', text: note }));
+    tip.style.display = 'block';
+    const w = tip.offsetWidth, ht = tip.offsetHeight;
+    let left = x + 14, top = y - ht - 10;
+    if (left + w > window.innerWidth - 8) left = x - w - 14;
+    if (top < 8) top = y + 16;
+    tip.style.left = Math.max(8, left) + 'px';
+    tip.style.top = top + 'px';
+  }
+  const hideTip = () => { tip.style.display = 'none'; };
+
+  // Pointer + keyboard hover over an index-based plot. The whole column is the hit target.
+  function attachHover(svg, plot, n, onIndex, onLeave) {
+    let idx = -1;
+    const hit = s('rect', { x: plot.l, y: plot.t, width: plot.w, height: plot.h, fill: 'transparent' }, svg);
+    const at = (i) => {
+      idx = Math.max(0, Math.min(n - 1, i));
+      const box = svg.getBoundingClientRect();
+      onIndex(idx, box.left + plot.l + (idx + 0.5) * (plot.w / n), box.top + plot.t + 8);
+    };
+    hit.addEventListener('pointermove', (e) => {
+      const box = svg.getBoundingClientRect();
+      at(Math.floor(((e.clientX - box.left - plot.l) / plot.w) * n));
+    });
+    hit.addEventListener('pointerleave', () => { hideTip(); onLeave(); });
+    svg.setAttribute('tabindex', '0');
+    svg.addEventListener('focus', () => at(idx < 0 ? n - 1 : idx));
+    svg.addEventListener('blur', () => { hideTip(); onLeave(); });
+    svg.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft') { at(idx - 1); e.preventDefault(); }
+      if (e.key === 'ArrowRight') { at(idx + 1); e.preventDefault(); }
+      if (e.key === 'Escape') { hideTip(); onLeave(); }
+    });
+  }
+
+  function drawYAxis(svg, sc, plot, W) {
+    for (const v of sc.ticks) {
+      const yy = plot.t + plot.h - (v / sc.top) * plot.h;
+      s('line', { x1: plot.l, x2: W - 8, y1: yy, y2: yy, stroke: v === 0 ? 'var(--axis)' : 'var(--grid)',
+                  'stroke-width': 1, 'shape-rendering': 'crispEdges' }, svg);
+      s('text', { x: plot.l - 8, y: yy + 4, 'text-anchor': 'end', class: 'tick', text: fmtTick(v, sc.step) }, svg);
+    }
+  }
+  // Label at most ~one tick per 64px, choosing from the candidate indices.
+  function drawXLabels(svg, plot, n, candidates, label) {
+    const maxLabels = Math.max(2, Math.floor(plot.w / 64));
+    const every = Math.ceil(candidates.length / maxLabels);
+    candidates.forEach((i, k) => {
+      if (k % every) return;
+      s('text', { x: plot.l + (i + 0.5) * (plot.w / n), y: plot.t + plot.h + 18, 'text-anchor': 'middle',
+                  class: 'tick', text: label(i) }, svg);
+    });
+  }
+
+  // ---- daily chart (one per fuel) ----
+  function drawDaily(container, rows, fuel) {
+    const W = container.clientWidth, H = 250;
+    const plot = { l: 52, t: 18, w: W - 52 - 8, h: H - 18 - 30 };
+    const n = rows.length, bw = plot.w / n;
+    const sc = scaleY(Math.max(...rows.map(val), ...rows.map(expected).filter(isFinite)));
+    const yOf = (v) => plot.t + plot.h - (v / sc.top) * plot.h;
+    const xc = (i) => plot.l + (i + 0.5) * bw;
+
+    const svg = s('svg', { width: W, height: H, role: 'img',
+      'aria-label': `${fuel.label} daily ${isKwh() ? 'energy use' : 'cost'}, ${n} days. Use arrow keys to step through days.` });
+    drawYAxis(svg, sc, plot, W);
+    const cross = s('line', { y1: plot.t, y2: plot.t + plot.h, stroke: 'var(--text-muted)', 'stroke-width': 1,
+                              visibility: 'hidden' }, svg);
+
+    if (bw >= 3) {
+      const gap = Math.min(2, bw * 0.3), w = bw - gap;
+      const d = rows.map((r, i) => barPath(plot.l + i * bw + gap / 2, yOf(val(r)), w, yOf(0) - yOf(val(r)),
+                                           Math.min(4, w / 2))).join('');
+      s('path', { d, style: `fill:${fuel.color}` }, svg);
+    } else {
+      const d = rows.map((r, i) => `${i ? 'L' : 'M'}${xc(i).toFixed(1)},${yOf(val(r)).toFixed(1)}`).join('');
+      s('path', { d, fill: 'none', 'stroke-width': 1.5, 'stroke-linejoin': 'round', style: `stroke:${fuel.color}` }, svg);
+    }
+
+    // Typical (trailing median) reference line, broken where there isn't enough history.
+    let d = '', pen = false;
+    rows.forEach((r, i) => {
+      const e = expected(r);
+      if (e == null || !isFinite(e)) { pen = false; return; }
+      d += `${pen ? 'L' : 'M'}${xc(i).toFixed(1)},${yOf(e).toFixed(1)}`;
+      pen = true;
+    });
+    s('path', { d, fill: 'none', stroke: 'var(--text-secondary)', 'stroke-width': 1.5, 'stroke-linejoin': 'round',
+                'stroke-opacity': 0.85 }, svg);
+
+    rows.forEach((r, i) => {
+      if (!r.anomaly) return;
+      s('text', { x: xc(i), y: yOf(val(r)) - 4, 'text-anchor': 'middle', 'font-size': 10,
+                  fill: 'var(--text-primary)', text: r.anomaly === 'high' ? '▲' : '▼' }, svg);
+    });
+
+    const monthStarts = rows.map((r, i) => (i === 0 || r.m !== rows[i - 1].m ? i : -1)).filter((i) => i >= 0);
+    const multiYear = rows[0].y !== rows[n - 1].y;
+    drawXLabels(svg, plot, n, monthStarts,
+      (i) => (multiYear ? `${MONTHS[rows[i].m]} ${String(rows[i].y).slice(2)}` : MONTHS[rows[i].m]));
+
+    attachHover(svg, plot, n, (i, x, y) => {
+      const r = rows[i];
+      cross.setAttribute('x1', xc(i)); cross.setAttribute('x2', xc(i)); cross.setAttribute('visibility', 'visible');
+      const lines = [{ color: fuel.color, value: fmt(val(r)), label: fuel.label }];
+      if (isFinite(expected(r))) lines.push({ color: 'var(--text-secondary)', value: fmt(expected(r)), label: 'Typical' });
+      const note = r.anomaly
+        ? `${r.anomaly === 'high' ? '▲ Unusually high' : '▼ Unusually low'} (${fmtPct(r.diffPct)} vs typical)`
+        : null;
+      showTip(x, y, fmtDate(r.t), lines, note);
+    }, () => cross.setAttribute('visibility', 'hidden'));
+
+    container.replaceChildren(svg);
+  }
+
+  // ---- grouped bars (one group per category, one bar per fuel) ----
+  function drawGrouped(container, cats, groups, opts) {
+    const W = container.clientWidth, H = 240;
+    const plot = { l: 52, t: 22, w: W - 52 - 8, h: H - 22 - 30 };
+    const n = cats.length, band = plot.w / n, k = groups.length;
+    const inner = Math.min(band * 0.72, k * 36), gap = 2;
+    const bw = Math.max(1, (inner - gap * (k - 1)) / k);
+    const all = groups.flatMap((g) => g.values).filter((v) => v != null);
+    const sc = scaleY(Math.max(...all));
+    const yOf = (v) => plot.t + plot.h - (v / sc.top) * plot.h;
+
+    const svg = s('svg', { width: W, height: H, role: 'img', 'aria-label': opts.aria });
+    drawYAxis(svg, sc, plot, W);
+    const wash = s('rect', { y: plot.t, height: plot.h, width: band, fill: 'var(--wash)', rx: 4, visibility: 'hidden' }, svg);
+
+    groups.forEach((g, j) => {
+      const d = g.values.map((v, i) => (v == null ? '' :
+        barPath(plot.l + i * band + (band - inner) / 2 + j * (bw + gap), yOf(v), bw, yOf(0) - yOf(v), Math.min(4, bw / 2))
+      )).join('');
+      s('path', { d, style: `fill:${g.fuel.color}` }, svg);
+      // Selective direct label: the most recent value of each series, when it fits.
+      const last = g.values.length - 1;
+      if (bw >= 26 && g.values[last] != null) {
+        s('text', { x: plot.l + last * band + (band - inner) / 2 + j * (bw + gap) + bw / 2, y: yOf(g.values[last]) - 5,
+                    'text-anchor': 'middle', class: 'tick', style: 'fill:var(--text-secondary)',
+                    text: fmtTick(g.values[last], g.values[last] < 10 ? 0.1 : 1) }, svg);
+      }
+    });
+
+    drawXLabels(svg, plot, n, cats.map((_, i) => i), (i) => cats[i]);
+
+    attachHover(svg, plot, n, (i, x, y) => {
+      wash.setAttribute('x', plot.l + i * band); wash.setAttribute('visibility', 'visible');
+      const lines = groups.filter((g) => g.values[i] != null)
+        .map((g) => ({ color: g.fuel.color, value: fmt(g.values[i]), label: `${g.fuel.label}${opts.extra ? opts.extra(g, i) : ''}` }));
+      showTip(x, y, opts.title(i), lines);
+    }, () => wash.setAttribute('visibility', 'hidden'));
+
+    container.replaceChildren(svg);
+  }
+
+  function legend(el, list) {
+    el.replaceChildren(...list.map((f) => h('span', {}, [keyRect(f.color), f.label])));
+  }
+
+  // ---- sections ----
+  function renderKpis() {
+    const wrap = $('#kpis');
+    wrap.replaceChildren();
+    for (const f of activeFuels()) {
+      const all = series[f.key], rows = all.filter(inPeriod);
+      const card = h('div', { class: 'card kpi' }, [h('h3', {}, [keyLine(f.color), f.label])]);
+      wrap.append(card);
+      if (!rows.length) { card.append(h('p', { class: 'empty', text: 'No data in this period' })); continue; }
+
+      const avg = mean(rows.map(val)), allAvg = mean(all.map(val));
+      card.append(h('p', { class: 'big' }, [fmt(avg), h('small', { text: 'per day' })]));
+      const whole = state.year === 'all' && state.month === 'all';
+      card.append(h('p', { class: 'delta',
+        text: whole ? `All ${rows.length} days on record` : `${fmtPct(pct(avg, allAvg))} vs all-time average of ${fmt(allAvg)}` }));
+      if (state.year !== 'all') {
+        const prev = all.filter((r) => inYearPeriod(r, +state.year - 1));
+        if (prev.length) {
+          const pAvg = mean(prev.map(val));
+          card.append(h('p', { class: 'delta', text: `${fmtPct(pct(avg, pAvg))} vs same period in ${+state.year - 1} (${fmt(pAvg)})` }));
+        }
+      }
+      const peak = rows.reduce((a, b) => (val(b) > val(a) ? b : a));
+      const dl = h('dl');
+      const stat = (k, v) => dl.append(h('dt', { text: k }), h('dd', { text: v }));
+      stat('Total', fmt(sum(rows.map(val))));
+      stat('Days', String(rows.length));
+      stat('Highest day', `${fmt(val(peak))} · ${new Date(peak.t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })}`);
+      stat('Unusual days', String(rows.filter((r) => r.anomaly).length));
+      card.append(dl);
+    }
+  }
+
+  function renderDaily() {
+    const wrap = $('#daily');
+    wrap.replaceChildren();
+    for (const f of activeFuels()) {
+      const rows = series[f.key].filter(inPeriod);
+      const chart = h('div', { class: 'chart' });
+      wrap.append(h('div', { class: 'card' }, [
+        h('h3', { text: `${f.label}: daily ${isKwh() ? 'energy use' : 'cost'}` }),
+        h('div', { class: 'legend' }, [
+          h('span', {}, [keyRect(f.color), 'Daily']),
+          h('span', {}, [keyLine('var(--text-secondary)'), 'Typical (median of previous 28 days)']),
+          h('span', {}, [h('span', { class: 'glyph', text: '▲▼' }), 'Unusual day']),
+        ]),
+        chart,
+      ]));
+      if (rows.length) drawDaily(chart, rows, f);
+      else chart.append(h('p', { class: 'empty', text: 'No data in this period' }));
+    }
+  }
+
+  function monthlyAgg() {
+    const keys = new Map();
+    for (const f of activeFuels()) {
+      for (const r of series[f.key].filter(inPeriod)) {
+        const key = r.y * 12 + r.m;
+        if (!keys.has(key)) keys.set(key, {});
+        const b = keys.get(key);
+        (b[f.key] ||= []).push(r);
+      }
+    }
+    return [...keys.entries()].sort((a, b) => a[0] - b[0]);
+  }
+
+  function renderMonthly() {
+    const el = $('#monthly');
+    const months = monthlyAgg();
+    const fs = activeFuels();
+    legend($('#monthly-legend'), fs);
+    if (!months.length) { el.replaceChildren(h('p', { class: 'empty', text: 'No data in this period' })); return; }
+    const multiYear = Math.floor(months[0][0] / 12) !== Math.floor(months[months.length - 1][0] / 12);
+    const cats = months.map(([k]) => (multiYear ? `${MONTHS[k % 12]} ${String(Math.floor(k / 12)).slice(2)}` : MONTHS[k % 12]));
+    const groups = fs.map((f) => ({
+      fuel: f,
+      values: months.map(([, b]) => (b[f.key] ? mean(b[f.key].map(val)) : null)),
+      days: months.map(([, b]) => (b[f.key] ? b[f.key].length : 0)),
+    }));
+    drawGrouped(el, cats, groups, {
+      aria: 'Average per day by month',
+      title: (i) => `${MONTHS_LONG[months[i][0] % 12]} ${Math.floor(months[i][0] / 12)}`,
+      extra: (g, i) => ` · ${g.days[i]} days`,
+    });
+  }
+
+  function renderDow() {
+    const el = $('#dow');
+    const fs = activeFuels();
+    legend($('#dow-legend'), fs);
+    const groups = fs.map((f) => {
+      const rows = series[f.key].filter(inPeriod);
+      return { fuel: f, values: DOW.map((_, d) => {
+        const v = rows.filter((r) => r.dow === d).map(val);
+        return v.length ? mean(v) : null;
+      }) };
+    });
+    if (!groups.some((g) => g.values.some((v) => v != null))) {
+      el.replaceChildren(h('p', { class: 'empty', text: 'No data in this period' }));
+      return;
+    }
+    drawGrouped(el, DOW, groups, { aria: 'Average per day by day of week', title: (i) => DOW[i] });
+  }
+
+  function renderAnomalies() {
+    const rows = activeFuels()
+      .flatMap((f) => series[f.key].filter((r) => r.anomaly && inPeriod(r)).map((r) => ({ r, f })))
+      .sort((a, b) => b.r.t - a.r.t);
+    const wrap = $('#anomalies');
+    $('#anomaly-sub').textContent = rows.length
+      ? `${rows.length} unusual day${rows.length === 1 ? '' : 's'} in this period, newest first.`
+      : '';
+    if (!rows.length) { wrap.replaceChildren(h('p', { class: 'empty', text: 'No unusual days in this period' })); return; }
+    const LIMIT = 100;
+    const table = h('table', {}, [h('thead', {}, h('tr', {}, [
+      h('th', { text: 'Date' }), h('th', { text: 'Fuel' }), h('th', { class: 'n', text: 'Used' }),
+      h('th', { class: 'n', text: 'Typical' }), h('th', { class: 'n', text: 'Difference' }), h('th', { text: '' }),
+    ]))]);
+    const body = h('tbody');
+    for (const { r, f } of rows.slice(0, LIMIT)) {
+      body.append(h('tr', {}, [
+        h('td', { text: fmtDate(r.t) }),
+        h('td', {}, h('span', { class: 'fuel-cell' }, [keyLine(f.color), f.label])),
+        h('td', { class: 'n', text: fmt(val(r)) }),
+        h('td', { class: 'n', text: fmt(expected(r)) }),
+        h('td', { class: 'n', text: fmtPct(r.diffPct) }),
+        h('td', { text: r.anomaly === 'high' ? 'Higher than usual' : 'Lower than usual' }),
+      ]));
+    }
+    table.append(body);
+    wrap.replaceChildren(table);
+    if (rows.length > LIMIT) wrap.append(h('p', { class: 'sub', text: `Showing the newest ${LIMIT} of ${rows.length}.` }));
+  }
+
+  function renderMonthlyTable() {
+    const months = monthlyAgg();
+    const wrap = $('#monthly-table');
+    if (!months.length) { wrap.replaceChildren(h('p', { class: 'empty', text: 'No data in this period' })); return; }
+    const kwhFmt = (v) => v.toLocaleString('en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    const gbp = (v) => '£' + v.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const table = h('table', {}, [h('thead', {}, h('tr', {}, [
+      h('th', { text: 'Month' }), h('th', { text: 'Fuel' }), h('th', { class: 'n', text: 'Days' }),
+      h('th', { class: 'n', text: 'Total kWh' }), h('th', { class: 'n', text: 'kWh / day' }),
+      h('th', { class: 'n', text: 'Total cost' }), h('th', { class: 'n', text: 'Cost / day' }),
+      h('th', { class: 'n', text: 'Unusual days' }),
+    ]))]);
+    const body = h('tbody');
+    for (const [k, b] of months.slice().reverse()) {
+      for (const f of activeFuels()) {
+        const rows = b[f.key];
+        if (!rows) continue;
+        const kwh = sum(rows.map((r) => r.kwh)), cost = sum(rows.map((r) => r.cost));
+        body.append(h('tr', {}, [
+          h('td', { text: `${MONTHS[k % 12]} ${Math.floor(k / 12)}` }),
+          h('td', {}, h('span', { class: 'fuel-cell' }, [keyLine(f.color), f.label])),
+          h('td', { class: 'n', text: String(rows.length) }),
+          h('td', { class: 'n', text: kwhFmt(kwh) }), h('td', { class: 'n', text: kwhFmt(kwh / rows.length) }),
+          h('td', { class: 'n', text: gbp(cost) }), h('td', { class: 'n', text: gbp(cost / rows.length) }),
+          h('td', { class: 'n', text: String(rows.filter((r) => r.anomaly).length) }),
+        ]));
+      }
+    }
+    table.append(body);
+    wrap.replaceChildren(table);
+  }
+
+  function render() {
+    hideTip();
+    const parts = [];
+    if (state.month !== 'all') parts.push(MONTHS_LONG[+state.month]);
+    parts.push(state.year === 'all' ? (state.month === 'all' ? 'All time' : 'every year') : state.year);
+    $('#period').textContent = `Showing: ${parts.join(' ')}`;
+    renderKpis();
+    renderDaily();
+    renderMonthly();
+    renderDow();
+    renderAnomalies();
+    renderMonthlyTable();
+  }
+
+  // ---- filters ----
+  function fillSelect(sel, options) {
+    sel.replaceChildren(...options.map(([v, label]) => h('option', { value: v, text: label })));
+  }
+  function init() {
+    const allRows = fuels.flatMap((f) => series[f.key]);
+    if (!allRows.length) {
+      $('#coverage').textContent = 'No usage data found in the CSV.';
+      return;
+    }
+    const first = Math.min(...allRows.map((r) => r.t)), last = Math.max(...allRows.map((r) => r.t));
+    $('#coverage').textContent = `${fmtDate(first)} to ${fmtDate(last)}`;
+    $('#footer').textContent = `Built ${PAYLOAD.generated} from ${PAYLOAD.source}`;
+
+    const years = [...new Set(allRows.map((r) => r.y))].sort();
+    fillSelect($('#f-year'), [['all', 'All years'], ...years.map((y) => [String(y), String(y)])]);
+    const months = [...new Set(allRows.map((r) => r.m))].sort((a, b) => a - b);
+    fillSelect($('#f-month'), [['all', 'All months'], ...months.map((m) => [String(m), MONTHS_LONG[m]])]);
+    fillSelect($('#f-fuel'), [['all', 'All fuels'], ...fuels.map((f) => [f.key, f.label])]);
+
+    $('#f-year').addEventListener('change', (e) => { state.year = e.target.value; render(); });
+    $('#f-month').addEventListener('change', (e) => { state.month = e.target.value; render(); });
+    $('#f-fuel').addEventListener('change', (e) => { state.fuel = e.target.value; render(); });
+    for (const b of document.querySelectorAll('#f-measure button')) {
+      b.addEventListener('click', () => {
+        state.measure = b.dataset.v;
+        for (const o of document.querySelectorAll('#f-measure button')) o.setAttribute('aria-pressed', String(o === b));
+        render();
+      });
+    }
+
+    render();
+    let lastWidth = $('#main').clientWidth, raf = 0;
+    new ResizeObserver(() => {
+      const w = $('#main').clientWidth;
+      if (w === lastWidth) return;
+      lastWidth = w;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(render);
+    }).observe($('#main'));
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

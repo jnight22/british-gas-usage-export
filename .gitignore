@@ -1,0 +1,14 @@
+# Logged-in browser session (cookies). Never commit this.
+.browser-profile/
+
+# Your account and meter IDs
+bg_config.json
+
+# Downloaded usage data, raw API responses and generated dashboards
+output/
+dashboard.html
+
+__pycache__/
+*.pyc
+.venv/
+venv/
