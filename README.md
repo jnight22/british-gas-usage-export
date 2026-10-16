@@ -115,3 +115,7 @@ Everything runs on your computer. These files are personal, and `.gitignore` kee
 - **The script keeps waiting after you log in.** Open the energy usage page. The script continues once the site makes its first data request.
 - **`FAILED ... HTTP 401` or `403`.** Your session expired or the token wasn't captured. Run the script again and open the usage page after logging in. The headers the script used are saved, with the token shortened, to `output/raw/captured_headers_redacted.json`.
 - **Meters are labelled with the wrong fuel.** Run with `--reconfigure`, or edit `bg_config.json`.
+
+## Licence
+
+[MIT](LICENSE)
